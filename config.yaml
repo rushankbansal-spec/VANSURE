@@ -1,0 +1,57 @@
+# VanSure Backend Configuration
+
+app:
+  name: VanSure
+  version: 0.1.0
+  debug: false
+
+database:
+  pool_size: 20
+  max_overflow: 40
+  pool_timeout: 30
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+logging:
+  level: INFO
+  format: json
+
+rate_limit:
+  max_auth_requests: 5
+  max_gps_requests: 20
+  max_general: 100
+
+cors:
+  allow_credentials: true
+  max_age: 3600
+
+jwt:
+  access_token_expiration: 900  # 15 minutes
+  refresh_token_expiration: 604800  # 7 days
+
+password:
+  memory_cost: 65536  # 64MB
+  time_cost: 3
+  parallelism: 4
+
+gps:
+  ttl_seconds: 300
+  batch_size: 100
+  archive_interval_seconds: 300
+
+notifications:
+  quiet_hours_start: "22:00:00"
+  quiet_hours_end: "08:00:00"
+  max_retries: 3
+  delivery_timeout: 300
+
+idempotency:
+  ttl_seconds: 86400
+  enabled: true
+
+billing:
+  currency: USD
+  late_fee_percentage: 1.5
+  late_fee_days: 7

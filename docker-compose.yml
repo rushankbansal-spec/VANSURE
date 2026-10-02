@@ -1,0 +1,110 @@
+version: "3.8"
+
+services:
+  # PostgreSQL with PostGIS
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: vansure-postgres
+    environment:
+      POSTGRES_USER: vansure
+      POSTGRES_PASSWORD: vansure_password
+      POSTGRES_DB: vansure_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./app/migrations:/app/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vansure -d vansure_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vansure_network
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: vansure-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vansure_network
+
+  # Celery worker
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vansure-celery
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://vansure:vansure_password@postgres:5432/vansure_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ./app:/app
+    networks:
+      - vansure_network
+
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vansure-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://vansure:vansure_password@postgres:5432/vansure_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - JWT_SECRET=your-production-secret-key-min-256-bits
+      - JWT_REFRESH_SECRET=your-refresh-secret-key-min-32-chars
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ./app:/app
+    restart: unless-stopped
+    networks:
+      - vansure_network
+
+  # Flower for Celery monitoring (optional)
+  flower:
+    image: mher/flower:latest
+    container_name: vansure-flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    restart: unless-stopped
+    networks:
+      - vansure_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  vansure_network:
+    driver: bridge
